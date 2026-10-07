@@ -25,6 +25,7 @@ import (
 	"github.com/gopacket/gopacket/pcap"
 	"github.com/gopacket/gopacket/pcapgo"
 	"github.com/gorilla/websocket"
+	"github.com/spq/pkappa2/internal/capture"
 	"github.com/spq/pkappa2/internal/index"
 	"github.com/spq/pkappa2/internal/index/manager"
 	"github.com/spq/pkappa2/internal/query"
@@ -92,6 +93,7 @@ func setupRouter(mgr *manager.Manager, stderrRing *ring.Ring, stderrLock *sync.R
 	}
 	rUser := r.With(checkBasicAuth(*userPassword))
 	rPcap := r.With(checkBasicAuth(*pcapPassword))
+	capture.RegisterRoutes(rUser)
 
 	rPcap.Post("/upload/{filename:.+[.]pcap(ng)?}", func(w http.ResponseWriter, r *http.Request) {
 		filename := chi.URLParam(r, "filename")

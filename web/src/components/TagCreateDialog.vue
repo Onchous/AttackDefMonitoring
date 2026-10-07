@@ -93,6 +93,10 @@ function openDialog(
   tagQueryValue: string,
   tagStreamsValue: number[],
 ) {
+  if (tagTypeValue === "service" && /^sport:[0-9,: -]+$/.test(tagQueryValue)) {
+    EventBus.emit("showServiceCapture", "", tagQueryValue.slice(6));
+    return;
+  }
   tagType.value = tagTypeValue;
   tagQuery.value = tagQueryValue;
   tagStreams.value = tagStreamsValue;

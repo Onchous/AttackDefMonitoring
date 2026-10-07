@@ -1,0 +1,20 @@
+[Unit]
+Description=Capture port 5001 and upload to Pkappa2
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=simple
+ExecStart=/opt/pkappa2-capture/capture.sh
+Environment=ENV_FILE=/etc/pkappa2-capture/monitor.env
+Environment=PORT=5001
+Environment=CAPTURE_DIR=/var/lib/pkappa2-capture5001
+Environment=IFACE=lo
+Environment=INTERVAL=10
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

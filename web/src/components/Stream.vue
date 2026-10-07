@@ -395,7 +395,15 @@
           </v-tabs>
         </v-row>
       </v-container>
+      <ChainDetails
+        :stream="stream.stream"
+        :expanded="$route.query.chain === '1'"
+        :presentation="presentation"
+        :highlight-matches="streams.result?.DataRegexes"
+        :url-decode="urlDecode"
+      />
       <StreamData
+        v-if="$route.query.chain !== '1'"
         ref="streamData"
         :data="stream.stream.Data"
         :viewmode="cardsViewMode"
@@ -409,6 +417,7 @@
 
 <script lang="ts" setup>
 import { EventBus } from "./EventBus";
+import ChainDetails from "./ChainDetails.vue";
 import { useRootStore } from "@/stores";
 import { useStreamStore } from "@/stores/stream";
 import { useStreamsStore } from "@/stores/streams";

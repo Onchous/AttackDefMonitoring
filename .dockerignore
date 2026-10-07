@@ -6,3 +6,17 @@ tmp
 .venv/
 .mypy_cache/
 .ruff_cache/
+venv/
+.env
+.env.*
+!.env.example
+.agents/
+.aws/
+.codex/
+**/*.pcap
+**/*.pcapng
+**/*.partial
+a1
+flagout.txt
+scripts/a[0-9]*.py
+scripts/pocara.py

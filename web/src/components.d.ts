@@ -12,10 +12,13 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     Base: typeof import('./components/Base.vue')['default']
+    CaptureStatus: typeof import('./components/CaptureStatus.vue')['default']
+    ChainDetails: typeof import('./components/ChainDetails.vue')['default']
     ConverterResetDialog: typeof import('./components/ConverterResetDialog.vue')['default']
     Converters: typeof import('./components/Converters.vue')['default']
     CTFWizardDialog: typeof import('./components/CTFWizardDialog.vue')['default']
     ErrorBanner: typeof import('./components/ErrorBanner.vue')['default']
+    EventChains: typeof import('./components/EventChains.vue')['default']
     Graph: typeof import('./components/Graph.vue')['default']
     Home: typeof import('./components/Home.vue')['default']
     Navigation: typeof import('./components/Navigation.vue')['default']

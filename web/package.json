@@ -13,7 +13,8 @@
     "format": "prettier --check --write .",
     "nearley": "nearleyc src/parser/query.ne -o src/parser/query.ts",
     "auto-guard": "ts-auto-guard --project tsconfig.app.json",
-    "auto-guard-debug": "ts-auto-guard --project tsconfig.app.json --debug"
+    "auto-guard-debug": "ts-auto-guard --project tsconfig.app.json --debug",
+    "test:chains": "node --test tests/chains.test.mjs"
   },
   "dependencies": {
     "@mdi/font": "^7.4.47",

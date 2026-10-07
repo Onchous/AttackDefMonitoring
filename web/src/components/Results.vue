@@ -1,6 +1,11 @@
 <template>
   <div>
     <ToolBar>
+      <v-btn
+        :variant="chainView ? 'tonal' : 'text'"
+        @click="chainView = !chainView"
+        >{{ chainView ? "По соединениям" : "Цепочки · 1 сек" }}</v-btn
+      >
       <v-tooltip location="bottom">
         <template #activator="{ props }">
           <v-btn
@@ -192,7 +197,8 @@
       ><span class="text-subtitle-1">No streams matched your search.</span>
     </div>
     <v-infinite-scroll v-else @load="load">
-      <v-table density="compact" hover>
+      <EventChains v-if="chainView" :results="streams.result.Results" />
+      <v-table v-else density="compact" hover>
         <template #default>
           <thead>
             <tr>
@@ -322,6 +328,7 @@
 
 <script lang="ts" setup>
 import { EventBus } from "./EventBus";
+import EventChains from "./EventChains.vue";
 import { useRootStore } from "@/stores";
 import { useStreamsStore } from "@/stores/streams";
 import {
@@ -345,6 +352,7 @@ import {
 import { getContrastTextColor } from "@/lib/colors";
 import prettyBytes from "pretty-bytes";
 
+const chainView = ref(true);
 const store = useRootStore();
 const route = useRoute();
 const router = useRouter();
@@ -408,6 +416,19 @@ watch(route, () => {
 
 onMounted(() => {
   fetchStreams();
+  const liveRefresh = setInterval(() => {
+    if (
+      streams.outdated &&
+      !streams.running &&
+      noneSelected.value &&
+      route.name === "search" &&
+      !Number(route.query.p) &&
+      !document.hidden
+    ) {
+      void streams.searchStreams(route.query.q as string, 0, false, true);
+    }
+  }, 2000);
+  onBeforeUnmount(() => clearInterval(liveRefresh));
 
   const handle = (e: KeyboardEvent, pageOffset: number) => {
     if (pageOffset >= 1 && !streams.result?.MoreResults) return;

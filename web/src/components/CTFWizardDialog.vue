@@ -16,10 +16,10 @@
       </v-tabs>
       <v-tabs-window v-model="tab">
         <v-tabs-window-item value="tab_service_by_port">
-          <v-form>
+          <v-form @submit.prevent="createService">
             <v-card-text>
-              This wizard will create a service with the given port(s). Enter
-              the ports separated by commas, ranges using a dash.
+              Укажите порт и интерфейс — захват трафика начнётся сразу.
+              Несколько портов: 7070,8080-8081.
 
               <v-text-field
                 v-model="serviceName"
@@ -27,6 +27,21 @@
                 autofocus
                 :rules="[() => serviceName != '']"
               ></v-text-field>
+              <v-select
+                v-model="serviceInterface"
+                :items="captureStatus?.Interfaces ?? []"
+                label="Сетевой интерфейс"
+                :loading="interfacesLoading"
+                hint="lo — localhost; eth0 — входящие соединения по сети"
+                persistent-hint
+              />
+              <v-alert
+                v-if="captureError"
+                type="error"
+                density="compact"
+                class="mb-3"
+                >{{ captureError }}</v-alert
+              >
               <v-text-field
                 v-model="servicePorts"
                 label="Service ports"
@@ -42,19 +57,20 @@
                 :disabled="
                   serviceName == '' ||
                   !goodServicePorts ||
+                  !serviceInterface ||
+                  !captureStatus ||
                   service_by_port_loading
                 "
                 :loading="service_by_port_loading"
                 :color="service_by_port_error ? 'error' : 'primary'"
                 type="submit"
-                @click="createService"
-                >Create Service</v-btn
+                >Сохранить и запустить захват</v-btn
               >
             </v-card-actions>
           </v-form>
         </v-tabs-window-item>
         <v-tabs-window-item value="tab_flag_regex">
-          <v-form>
+          <v-form @submit.prevent="createFlagTags">
             <v-card-text>
               This wizard will create the two tags {{ flagInName }} and
               {{ flagOutName }} with the specified regex below if they don't
@@ -77,7 +93,6 @@
                 :loading="flag_regex_loading"
                 :color="flag_regex_error ? 'error' : 'primary'"
                 type="submit"
-                @click="createFlagTags"
                 >Create Flag tags</v-btn
               >
             </v-card-actions>
@@ -93,6 +108,9 @@ import { EventBus } from "./EventBus";
 import { ref, computed } from "vue";
 import { useRootStore } from "@/stores";
 import { randomColor } from "@/lib/colors";
+import APIClient, { type CaptureStatus } from "@/apiClient";
+import { parsePorts } from "@/lib/capture";
+import axios from "axios";
 
 const store = useRootStore();
 const visible = ref(false);
@@ -100,12 +118,22 @@ const tab = ref("");
 
 const flag_regex_loading = ref(false);
 const flag_regex_error = ref(false);
-const flagRegex = ref("");
+const flagRegex = ref("[A-Z0-9]{31}=");
 
 const service_by_port_loading = ref(false);
 const service_by_port_error = ref(false);
 const serviceName = ref("");
 const servicePorts = ref("");
+const serviceInterface = ref("");
+const captureStatus = ref<CaptureStatus | null>(null);
+const interfacesLoading = ref(false);
+const captureError = ref("");
+EventBus.on("showServiceCapture", (name, ports) => {
+  openDialog();
+  tab.value = "tab_service_by_port";
+  serviceName.value = name;
+  servicePorts.value = ports;
+});
 
 const tagPrefix = "tag/";
 const servicePrefix = "service/";
@@ -119,7 +147,12 @@ const flagOutPrefix = "sdata:";
 EventBus.on("showCTFWizard", openDialog);
 
 const goodServicePorts = computed(() => {
-  return /^( *, *[0-9]+ *([-:] *[0-9]+ *)?)+$/.test("," + servicePorts.value);
+  try {
+    parsePorts(servicePorts.value);
+    return true;
+  } catch {
+    return false;
+  }
 });
 
 const goodFlagRegex = computed(() => {
@@ -136,6 +169,7 @@ const goodFlagRegex = computed(() => {
 function openDialog() {
   visible.value = true;
   tab.value = "tab_flag_regex";
+  void loadInterfaces();
 
   flag_regex_loading.value = false;
   flag_regex_error.value = false;
@@ -150,31 +184,77 @@ function submitCurrent() {
       createFlagTags();
       break;
     case "tab_service_by_port":
-      createService();
+      void createService();
       break;
   }
 }
 
-function createService() {
+async function loadInterfaces() {
+  interfacesLoading.value = true;
+  captureError.value = "";
+  captureStatus.value = null;
+  try {
+    captureStatus.value = await APIClient.getCaptureStatus();
+    const existing = captureStatus.value.Sources.find(
+      (s) => s.Name === serviceName.value.trim(),
+    );
+    serviceInterface.value =
+      existing?.Interface ??
+      (captureStatus.value.Interfaces.includes("eth0") ? "eth0" : "lo");
+  } catch (err) {
+    captureError.value = axios.isAxiosError(err)
+      ? (err.response?.data?.Error ?? err.response?.data ?? err.message)
+      : String(err);
+  } finally {
+    interfacesLoading.value = false;
+  }
+}
+
+async function createService() {
+  if (
+    service_by_port_loading.value ||
+    !goodServicePorts.value ||
+    !serviceInterface.value ||
+    !captureStatus.value ||
+    !serviceName.value.trim()
+  )
+    return;
   service_by_port_loading.value = true;
   service_by_port_error.value = false;
-  const query = `sport:${servicePorts.value
-    .replaceAll("-", ":")
-    .replaceAll(" ", "")}`;
-  store
-    .addTag(servicePrefix + serviceName.value, query, randomColor())
-    .then(() => {
-      service_by_port_loading.value = false;
-      EventBus.emit("showMessage", `Service ${serviceName.value} created.`);
-    })
-    .catch((err: Error) => {
-      service_by_port_error.value = true;
-      service_by_port_loading.value = false;
-      EventBus.emit("showError", err.message);
-    });
+  captureError.value = "";
+  try {
+    const ports = parsePorts(servicePorts.value);
+    const name = serviceName.value.trim();
+    const tagName = servicePrefix + name;
+    const query = `sport:${ports.join(",")}`;
+    const status = await APIClient.startCapture(
+      name,
+      serviceInterface.value,
+      ports,
+    );
+    if (!status.Sources.find((s) => s.Name === name)?.Running)
+      throw new Error("Захват не запустился");
+    if (store.tags?.some((tag) => tag.Name === tagName))
+      await store.changeTagDefinition(tagName, query);
+    else await store.addTag(tagName, query, randomColor());
+    await store.updateTags();
+    visible.value = false;
+    EventBus.emit(
+      "showMessage",
+      `Захват ${name}: ${serviceInterface.value}, порты ${ports.join(", ")} запущен`,
+    );
+  } catch (err) {
+    service_by_port_error.value = true;
+    captureError.value = axios.isAxiosError(err)
+      ? (err.response?.data?.Error ?? err.response?.data ?? err.message)
+      : String(err);
+  } finally {
+    service_by_port_loading.value = false;
+  }
 }
 
 function createFlagTags() {
+  if (flag_regex_loading.value || !goodFlagRegex.value) return;
   flag_regex_loading.value = true;
   flag_regex_error.value = false;
   Promise.allSettled([

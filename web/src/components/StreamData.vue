@@ -241,10 +241,17 @@ import moment from "moment";
 import prettyBytes from "pretty-bytes";
 import { getColorScheme, onColorSchemeChange } from "@/lib/darkmode";
 import { useStreamStore } from "@/stores/stream";
+import { useRootStore } from "@/stores";
+import {
+  matchRanges,
+  renderHighlights,
+  type HighlightRange,
+} from "@/lib/highlight";
 import { EventBus } from "./EventBus";
 import { CYBERCHEF_URL } from "@/lib/constants";
 
 const stream = useStreamStore();
+const root = useRootStore();
 const props = defineProps({
   viewmode: {
     type: String,
@@ -305,6 +312,16 @@ const data = ref(
   }),
 );
 
+watch(
+  () => props.data,
+  (chunks) => {
+    data.value = chunks.map((chunk) => ({
+      ...chunk,
+      Presentation: props.presentation,
+    }));
+  },
+);
+
 const getBgThemeColor = () => {
   const colorScheme = getColorScheme();
   return {
@@ -355,42 +372,58 @@ const asciiMap = Array.from({ length: 0x100 }, (_, i) => {
   return `&#x${i.toString(16).padStart(2, "0")};`;
 });
 
+const flagRegexes = computed(() => {
+  const patterns = ["[A-Z0-9]{31}="];
+  for (const tag of root.tags ?? []) {
+    if (!/^tag\/flag_(in|out)$/.test(tag.Name)) continue;
+    let pattern = tag.Definition.replace(/^[cs]data:/, "");
+    if (pattern.startsWith('"') && pattern.endsWith('"'))
+      pattern = pattern.slice(1, -1);
+    patterns.push(pattern);
+  }
+  return highlightRegex([...new Set(patterns)]) ?? [];
+});
+const splitFlags = computed(() => {
+  const ranges = new Map<number, HighlightRange[]>();
+  for (const direction of [0, 1]) {
+    let raw = "";
+    const spans: { index: number; start: number; end: number }[] = [];
+    data.value.forEach((chunk, index) => {
+      if (chunk.Direction !== direction) return;
+      const start = raw.length;
+      raw += atob(chunk.Content);
+      spans.push({ index, start, end: raw.length });
+    });
+    for (const match of matchRanges(raw, flagRegexes.value, true)) {
+      for (const span of spans) {
+        if (match.start >= span.end || match.end <= span.start) continue;
+        const local = {
+          start: Math.max(0, match.start - span.start),
+          end: Math.min(span.end, match.end) - span.start,
+          flag: true,
+        };
+        ranges.set(span.index, [...(ranges.get(span.index) ?? []), local]);
+      }
+    }
+  }
+  return ranges;
+});
 const handleHighlightMatches = (
-  direction: number,
+  chunk: Data,
   chunkData: string,
   asciiEscaped: string[],
 ) => {
-  const highlightMatchesRegex =
-    direction === 0
+  const queries =
+    chunk.Direction === 0
       ? highlightMatchesClient.value
       : highlightMatchesServer.value;
-  if (highlightMatchesRegex !== undefined) {
-    const highlights: number[][] = [];
-    for (const regex of highlightMatchesRegex) {
-      if (regex === undefined) continue;
-      for (const match of chunkData.matchAll(regex)) {
-        highlights.push([match.index, match[0].length]);
-      }
-    }
-    highlights.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-    let highlightIndex = 0;
-    for (const [index, length] of highlights) {
-      asciiEscaped[index] =
-        `<span class="mark" data-offset="${index}">${asciiEscaped[index]}`;
-      if (highlightIndex > 0) {
-        asciiEscaped[index] = `</span>${asciiEscaped[index]}`;
-      }
-      asciiEscaped[index + length - 1] =
-        `${asciiEscaped[index + length - 1]}</span><span data-offset="${index + length}">`;
-      highlightIndex++;
-    }
-    if (highlightIndex > 0) {
-      asciiEscaped[asciiEscaped.length - 1] =
-        `${asciiEscaped[asciiEscaped.length - 1]}</span>`;
-    }
-  }
-
-  return asciiEscaped.join("");
+  const flags = props.urlDecode
+    ? matchRanges(chunkData, flagRegexes.value, true)
+    : (splitFlags.value.get(data.value.findIndex((c) => c === chunk)) ?? []);
+  return renderHighlights(asciiEscaped, [
+    ...matchRanges(chunkData, queries ?? []),
+    ...flags,
+  ]);
 };
 
 const inlineUnicode = (chunk: Data) => {
@@ -399,7 +432,7 @@ const inlineUnicode = (chunk: Data) => {
     const charCode = c.charCodeAt(0);
     return asciiMap[charCode] !== undefined ? asciiMap[charCode] : c;
   });
-  return handleHighlightMatches(chunk.Direction, chunkData, asciiEscaped);
+  return handleHighlightMatches(chunk, chunkData, asciiEscaped);
 };
 
 const inlineAscii = (chunk: Data) => {
@@ -407,7 +440,7 @@ const inlineAscii = (chunk: Data) => {
   const asciiEscaped = chunkData
     .split("")
     .map((c) => asciiMap[c.charCodeAt(0)]);
-  return handleHighlightMatches(chunk.Direction, chunkData, asciiEscaped);
+  return handleHighlightMatches(chunk, chunkData, asciiEscaped);
 };
 
 const classes = (chunk: Data) => ({
@@ -575,14 +608,18 @@ function openInCyberChef(chunk: Data) {
   }
 }
 .server :deep(.mark) {
-  background-color: #9090ff;
+  background-color: #ffff00;
+  color: #000000;
+  font-weight: 700;
 }
 .client {
   color: #800000;
   background-color: #faeeed;
 }
 .client :deep(.mark) {
-  background-color: #ff8e5e;
+  background-color: #ffff00;
+  color: #000000;
+  font-weight: 700;
 }
 
 .v-theme--dark {

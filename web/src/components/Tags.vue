@@ -19,8 +19,16 @@
       </v-tooltip>
     </ToolBar>
     <v-card density="compact" variant="flat">
-      <v-card-title>Manage Tags</v-card-title>
+      <v-card-title class="d-flex align-center"
+        >Manage Tags<v-spacer /><v-btn
+          size="small"
+          color="primary"
+          @click="EventBus.emit('showServiceCapture', '', '')"
+          >Добавить сервис и захват</v-btn
+        ></v-card-title
+      >
     </v-card>
+    <CaptureStatus />
     <v-table density="compact" hover>
       <thead>
         <tr>
@@ -64,6 +72,22 @@
               <span>{{ converterList[tag.Name] }}</span>
             </td>
             <td style="text-align: right">
+              <v-btn
+                v-if="tagType.key === 'service'"
+                icon="mdi-access-point-network"
+                variant="plain"
+                density="compact"
+                title="Настроить интерфейс и запустить захват"
+                @click="
+                  EventBus.emit(
+                    'showServiceCapture',
+                    tag.Name.slice(8),
+                    tag.Definition.startsWith('sport:')
+                      ? tag.Definition.slice(6)
+                      : '',
+                  )
+                "
+              />
               <v-tooltip location="bottom">
                 <template #activator="{ props }">
                   <v-btn
@@ -173,6 +197,7 @@
 
 <script lang="ts" setup>
 import { computed, onMounted } from "vue";
+import CaptureStatus from "./CaptureStatus.vue";
 import { EventBus } from "./EventBus";
 import { useRootStore } from "@/stores";
 import { tagForURI } from "@/filters";

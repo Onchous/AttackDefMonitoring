@@ -12,6 +12,19 @@ tmp/*
 .env.local
 .env.*.local
 .env
+.env.*
+!.env.example
+venv/
+.agents/
+.aws/
+.codex/
+*.pcap
+*.pcapng
+*.partial
+/a1
+/flagout.txt
+/scripts/a[0-9]*.py
+/scripts/pocara.py
 
 # Log files
 npm-debug.log*

@@ -182,7 +182,51 @@ export type GraphResponse = {
   Data: GraphData[];
 };
 
+export type CaptureSource = {
+  Name: string;
+  Interface: string;
+  Ports: number[];
+  Running: boolean;
+  Packets: number;
+  LastPacket: number | null;
+  Error: string;
+};
+export type CaptureStatus = {
+  Interfaces: string[];
+  Sources: CaptureSource[];
+  UploadError: string;
+  LastUpload: number | null;
+  PendingFiles: number;
+};
+
 const APIClient = {
+  async getCaptureStatus() {
+    return (await client.get<CaptureStatus>("/capture/sources")).data;
+  },
+  async startCapture(Name: string, Interface: string, Ports: number[]) {
+    return (
+      await client.post<CaptureStatus>("/capture/sources", {
+        Name,
+        Interface,
+        Ports,
+      })
+    ).data;
+  },
+  async stopCapture(Name: string) {
+    return (
+      await client.delete<CaptureStatus>("/capture/sources", { data: { Name } })
+    ).data;
+  },
+  async searchChainStreams(host: string, page: number) {
+    const response = await client.post(
+      "/search.json",
+      `chost:${host} sort:ftime,id`,
+      { params: { page } },
+    );
+    if (!isSearchResponse(response.data))
+      throw new Error("Invalid chain search response");
+    return response.data;
+  },
   async searchStreams(query: string, page: number) {
     return this.performGuarded(
       "post",

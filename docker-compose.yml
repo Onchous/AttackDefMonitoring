@@ -3,10 +3,11 @@ services:
     build:
       context: .
     ports:
-      - 8080:8080
+      - "${PKAPPA2_BIND_ADDRESS:-0.0.0.0}:${PKAPPA2_HTTP_PORT:-8080}:8080"
     volumes:
       - pkappa2-data:/data
       - ./converters:/app/converters
+      - capture-control:/run/pkappa2-capture:ro
       # Uncomment the following line to use a local directory for new pcap files
       # - ./pcaps_incoming:/pcaps_in
     restart: unless-stopped
@@ -14,5 +15,28 @@ services:
       # Change values in .env file
       - .env
 
+  capture:
+    build:
+      context: ./capture
+    network_mode: host
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_RAW
+      - SETUID
+      - SETGID
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - capture-control:/run/pkappa2-capture
+      - capture-state:/state
+    env_file:
+      - .env
+    environment:
+      UPLOAD_URL: http://127.0.0.1:${PKAPPA2_HTTP_PORT:-8080}
+    restart: unless-stopped
+
 volumes:
+  capture-control:
+  capture-state:
   pkappa2-data:

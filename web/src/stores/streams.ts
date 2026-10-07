@@ -25,13 +25,18 @@ export const useStreamsStore = defineStore("streams", {
     outdated: false,
   }),
   actions: {
-    async searchStreams(query: string, page: number, append = false) {
+    async searchStreams(
+      query: string,
+      page: number,
+      append = false,
+      background = false,
+    ) {
       if (!page) page = 0;
       this.query = query;
       if (!append) this.page = page;
       this.running = true;
       this.error = null;
-      if (!append) this.result = null;
+      if (!append && !background) this.result = null;
       this.outdated = false;
       return APIClient.searchStreams(query, page)
         .then((data) => {

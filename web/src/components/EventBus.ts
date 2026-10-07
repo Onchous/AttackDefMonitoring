@@ -18,6 +18,7 @@ interface GlobalEvents {
   showTagDetailsDialog: (tagId: string) => void;
   showTagSetConvertersDialog: (tagId: string) => void;
   showCTFWizard: () => void;
+  showServiceCapture: (name: string, ports: string) => void;
 }
 
 export const EventBus = new TypedEmitter<GlobalEvents>();
