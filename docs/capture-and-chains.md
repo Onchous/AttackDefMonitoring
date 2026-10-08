@@ -95,6 +95,7 @@ import sys
 
 IP = sys.argv[1]
 s = requests.Session()
+s.trust_env = False
 r = s.get(f"http://{IP}:7070/profile", headers={"Host": "localhost:7070"},
           allow_redirects=False, timeout=30)
 print(r.text, flush=True)
