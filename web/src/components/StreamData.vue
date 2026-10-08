@@ -608,15 +608,17 @@ function openInCyberChef(chunk: Data) {
   }
 }
 .server :deep(.mark) {
-  background-color: #ffff00;
-  color: #000000;
-  font-weight: 700;
+  background-color: #9090ff;
 }
 .client {
   color: #800000;
   background-color: #faeeed;
 }
 .client :deep(.mark) {
+  background-color: #ff8e5e;
+}
+.server :deep(.flag-mark),
+.client :deep(.flag-mark) {
   background-color: #ffff00;
   color: #000000;
   font-weight: 700;

@@ -8,12 +8,17 @@ services:
       - pkappa2-data:/data
       - ./converters:/app/converters
       - capture-control:/run/pkappa2-capture:ro
+      - "${DESTRUCTIVE_FARM_CLIENT_DIR:-./farm_exports}:/farm-exports"
       # Uncomment the following line to use a local directory for new pcap files
       # - ./pcaps_incoming:/pcaps_in
     restart: unless-stopped
     env_file:
       # Change values in .env file
       - .env
+    environment:
+      PKAPPA2_FARM_EXPORT_DIR: /farm-exports
+    group_add:
+      - "${PKAPPA2_FARM_EXPORT_GID:-1000}"
 
   capture:
     build:

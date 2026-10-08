@@ -11,6 +11,7 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AiExploitDialog: typeof import('./components/AiExploitDialog.vue')['default']
     Base: typeof import('./components/Base.vue')['default']
     CaptureStatus: typeof import('./components/CaptureStatus.vue')['default']
     ChainDetails: typeof import('./components/ChainDetails.vue')['default']

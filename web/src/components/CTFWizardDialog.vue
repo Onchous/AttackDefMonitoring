@@ -222,9 +222,14 @@ async function createService() {
   service_by_port_loading.value = true;
   service_by_port_error.value = false;
   captureError.value = "";
+  const name = serviceName.value.trim();
+  const previousCapture = captureStatus.value.Sources.find(
+    (source) => source.Name === name,
+  );
+  let captureChanged = false;
+  let tagSaved = false;
   try {
     const ports = parsePorts(servicePorts.value);
-    const name = serviceName.value.trim();
     const tagName = servicePrefix + name;
     const query = `sport:${ports.join(",")}`;
     const status = await APIClient.startCapture(
@@ -232,11 +237,13 @@ async function createService() {
       serviceInterface.value,
       ports,
     );
+    captureChanged = true;
     if (!status.Sources.find((s) => s.Name === name)?.Running)
       throw new Error("Захват не запустился");
     if (store.tags?.some((tag) => tag.Name === tagName))
       await store.changeTagDefinition(tagName, query);
     else await store.addTag(tagName, query, randomColor());
+    tagSaved = true;
     await store.updateTags();
     visible.value = false;
     EventBus.emit(
@@ -244,6 +251,22 @@ async function createService() {
       `Захват ${name}: ${serviceInterface.value}, порты ${ports.join(", ")} запущен`,
     );
   } catch (err) {
+    if (captureChanged && !tagSaved) {
+      try {
+        if (previousCapture)
+          await APIClient.startCapture(
+            previousCapture.Name,
+            previousCapture.Interface,
+            previousCapture.Ports,
+          );
+        else await APIClient.stopCapture(name);
+      } catch (rollbackError) {
+        EventBus.emit(
+          "showError",
+          `Не удалось откатить захват после ошибки метки: ${String(rollbackError)}`,
+        );
+      }
+    }
     service_by_port_error.value = true;
     captureError.value = axios.isAxiosError(err)
       ? (err.response?.data?.Error ?? err.response?.data ?? err.message)

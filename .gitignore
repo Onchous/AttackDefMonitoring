@@ -23,6 +23,7 @@ venv/
 *.partial
 /a1
 /flagout.txt
+/farm_exports/
 /scripts/a[0-9]*.py
 /scripts/pocara.py
 

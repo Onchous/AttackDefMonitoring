@@ -8,7 +8,7 @@ export type Chain = {
 };
 export function groupChains(results: Result[], gap = 1000): Chain[] {
   const chains: Chain[] = [];
-  const latest = new Map<string, Chain>();
+  const latest = new Map<string, Chain & { lastStart: number }>();
   for (const result of [...results].sort(
     (a, b) =>
       Date.parse(a.Stream.FirstPacket) - Date.parse(b.Stream.FirstPacket) ||
@@ -17,14 +17,22 @@ export function groupChains(results: Result[], gap = 1000): Chain[] {
     const stream = result.Stream;
     const start = Date.parse(stream.FirstPacket);
     const end = Date.parse(stream.LastPacket);
-    let chain = latest.get(stream.Client.Host);
-    if (!chain || start - chain.end > gap) {
-      chain = { client: stream.Client.Host, streams: [], start, end };
-      latest.set(chain.client, chain);
+    const key = stream.Client.Host;
+    let chain = latest.get(key);
+    if (!chain || start - chain.lastStart > gap) {
+      chain = {
+        client: stream.Client.Host,
+        streams: [],
+        start,
+        end,
+        lastStart: start,
+      };
+      latest.set(key, chain);
       chains.push(chain);
     }
     chain.streams.push(result);
     chain.end = Math.max(chain.end, end);
+    chain.lastStart = start;
   }
   return chains.sort((a, b) => b.start - a.start);
 }
@@ -123,8 +131,10 @@ export function parseRequests(data: StreamData): Request[] {
 function pyString(text: string): string {
   return JSON.stringify(text);
 }
-function pyDict(entries: [string, string][]): string {
-  return `{${entries.map(([key, value]) => `${pyString(key)}: ${pyString(value)}`).join(", ")}}`;
+function pyHeaders(entries: [string, string][]): string {
+  return `{${entries
+    .map(([key, value]) => `${pyString(key)}: ${pyString(value)}`)
+    .join(", ")}}`;
 }
 function pyBytes(text: string): string {
   return (
@@ -141,10 +151,11 @@ function pyBytes(text: string): string {
   );
 }
 
-export function pythonReplay(streams: StreamData[]): string {
-  const requests = streams
-    .flatMap(parseRequests)
-    .sort((a, b) => a.time - b.time || a.stream.ID - b.stream.ID);
+function renderPython(
+  streams: StreamData[],
+  requests: Request[],
+  skipped: ReplaySkip[] = [],
+): string {
   if (!requests.length) throw new Error("No HTTP requests in this chain");
   const hasCookies = requests.some((r) =>
     r.headers.some(([name]) => name.toLowerCase() === "cookie"),
@@ -156,15 +167,18 @@ export function pythonReplay(streams: StreamData[]): string {
     ...(hasCookies
       ? [
           "from http.cookies import SimpleCookie",
-          "from urllib.parse import quote, quote_plus, urlsplit",
+          "from urllib.parse import quote, quote_plus",
         ]
       : []),
     "",
     "IP = sys.argv[1]",
-    "if ':' in IP and not IP.startswith('['):",
-    "    IP = f'[{IP}]'",
+    "TARGET = f'[{IP}]' if ':' in IP and not IP.startswith('[') else IP",
     "",
     `# Generated from streams ${streams.map((s) => s.Stream.ID).join(", ")}`,
+    ...skipped.map(
+      (item) =>
+        `# Skipped stream ${item.streamId}: ${item.reason.replace(/[\r\n]+/g, " ")}`,
+    ),
     "s = requests.Session()",
     "s.trust_env = False",
   ];
@@ -175,19 +189,22 @@ export function pythonReplay(streams: StreamData[]): string {
         "# Use fresh cookies from responses and update cookie-based CSRF values.",
         "_replacements = {}",
         "_seeded = set()",
-        "def prepare_cookies(captured, host):",
-        "    domain = urlsplit('http://' + host).hostname or IP.strip('[]')",
-        "    if '.' not in domain:",
-        "        domain += '.local'",
+        "def prepare_cookies(captured):",
         "    cookies = SimpleCookie()",
         "    cookies.load(captured)",
         "    for name, morsel in cookies.items():",
-        "        live = next((c.value for c in s.cookies if c.name == name and c.domain.lstrip('.') == domain), None)",
-        "        if live is None and (domain, name) not in _seeded:",
-        "            s.cookies.set(name, morsel.value, domain=domain, path='/')",
+        "        scoped = next((c.value for c in s.cookies if c.name == name and c.domain), None)",
+        "        if scoped is not None and name in _seeded:",
+        "            try:",
+        "                s.cookies.clear(domain='', path='/', name=name)",
+        "            except KeyError:",
+        "                pass",
+        "        live = scoped if scoped is not None else next((c.value for c in s.cookies if c.name == name), None)",
+        "        if live is None and name not in _seeded:",
+        "            s.cookies.set(name, morsel.value, path='/')",
         "            live = morsel.value",
-        "        _seeded.add((domain, name))",
-        "        if live is not None and morsel.value and live != morsel.value:",
+        "        _seeded.add(name)",
+        "        if live is not None and len(morsel.value) >= 6 and live != morsel.value:",
         "            _replacements[morsel.value] = live",
         "",
         "def rewrite(value):",
@@ -202,7 +219,7 @@ export function pythonReplay(streams: StreamData[]): string {
         "    return value",
       ],
     );
-  for (const request of requests) {
+  requests.forEach((request, requestIndex) => {
     const cookie = request.headers.find(
       ([key]) => key.toLowerCase() === "cookie",
     )?.[1];
@@ -212,8 +229,8 @@ export function pythonReplay(streams: StreamData[]): string {
     if (!target.startsWith("/") || request.method === "CONNECT")
       throw new Error("Cannot export HTTP proxy/tunnel request");
     // Escape f-string braces originating in the captured path, preserving the IP placeholder.
-    const url = `f${pyString(`http://{IP}:${request.stream.Server.Port}${target.replaceAll("{", "{{").replaceAll("}", "}}")}`)}`;
-    const headers = pyDict(
+    let url = `f${pyString(`http://{TARGET}:${request.stream.Server.Port}${target.replaceAll("{", "{{").replaceAll("}", "}}")}`)}`;
+    const headers = pyHeaders(
       request.headers.filter(
         ([name]) =>
           ![
@@ -221,6 +238,11 @@ export function pythonReplay(streams: StreamData[]): string {
             "transfer-encoding",
             "cookie",
             "accept-encoding",
+            "connection",
+            "proxy-connection",
+            "keep-alive",
+            "te",
+            "trailer",
           ].includes(name.toLowerCase()),
       ),
     );
@@ -243,17 +265,62 @@ export function pythonReplay(streams: StreamData[]): string {
       `# Stream ${request.stream.ID}: ${request.method} ${target.replace(/[\r\n]/g, " ")}`,
     );
     if (cookie) {
-      const host = request.headers.find(
-        ([key]) => key.toLowerCase() === "host",
-      )?.[1];
-      lines.push(
-        `prepare_cookies(${pyString(cookie)}, ${host ? pyString(host) : "IP"})`,
-      );
+      lines.push(`prepare_cookies(${pyString(cookie)})`);
+    }
+    if (hasCookies) {
+      const pathVariable = `_request_path_${requestIndex + 1}`;
+      lines.push(`${pathVariable} = rewrite(${pyString(target.slice(1))})`);
+      // Keep the complete authority static. Dynamic replacements are confined
+      // to the path after '/', so they can never change the destination host.
+      url = `f"http://{TARGET}:${request.stream.Server.Port}/{${pathVariable}.lstrip('/')}"`;
     }
     const args = [adapt(url), `headers=${adapt(headers)}`];
+    if (hasCookies) args[0] = url;
     if (request.body.length) args.push(`data=${adapt(pyBytes(request.body))}`);
     args.push("allow_redirects=False", "timeout=30");
     lines.push(`r = ${call}${args.join(", ")})`, "print(r.text, flush=True)");
-  }
+  });
   return lines.join("\n") + "\n";
+}
+
+export type ReplaySkip = { streamId: number; reason: string };
+export type ReplayResult = {
+  code: string;
+  requestCount: number;
+  skipped: ReplaySkip[];
+};
+
+export function pythonReplay(streams: StreamData[]): string {
+  const requests = streams
+    .flatMap(parseRequests)
+    .sort((a, b) => a.time - b.time || a.stream.ID - b.stream.ID);
+  return renderPython(streams, requests);
+}
+
+export function pythonReplayDetailed(streams: StreamData[]): ReplayResult {
+  const requests: Request[] = [];
+  const skipped: ReplaySkip[] = [];
+  for (const stream of streams) {
+    try {
+      const parsed = parseRequests(stream);
+      if (parsed.length) {
+        // Validate URL/method constraints per stream so one proxy/tunnel request
+        // cannot prevent exporting the remaining HTTP chain.
+        renderPython([stream], parsed);
+        requests.push(...parsed);
+      } else
+        skipped.push({
+          streamId: stream.Stream.ID,
+          reason: "no client HTTP requests",
+        });
+    } catch (error) {
+      skipped.push({ streamId: stream.Stream.ID, reason: String(error) });
+    }
+  }
+  requests.sort((a, b) => a.time - b.time || a.stream.ID - b.stream.ID);
+  return {
+    code: renderPython(streams, requests, skipped),
+    requestCount: requests.length,
+    skipped,
+  };
 }

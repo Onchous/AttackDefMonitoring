@@ -27,7 +27,7 @@ RUN python3 -m pip install --break-system-packages --upgrade -r requirements.txt
 COPY --from=backend_builder /app/bin/pkappa2 ./pkappa2
 COPY --from=backend_builder /app/web/dist ./web/dist
 
-RUN adduser pkappa2
+RUN groupadd --gid 1000 pkappa2 && useradd --uid 1000 --gid pkappa2 --create-home pkappa2
 RUN mkdir /data && chown pkappa2:pkappa2 /data
 RUN mkdir /pcaps_in && chown pkappa2:pkappa2 /pcaps_in
 RUN mkdir /app/converters && chown pkappa2:pkappa2 /app/converters

@@ -199,7 +199,29 @@ export type CaptureStatus = {
   PendingFiles: number;
 };
 
+export type FarmExportStatus = {
+  Available: boolean;
+  Valid?: boolean;
+  Filename?: string;
+  Error?: string;
+};
+
 const APIClient = {
+  async getFarmExportStatus() {
+    return (await client.get<FarmExportStatus>("/farm-export")).data;
+  },
+  async exportToFarm(Name: string, Code: string) {
+    return (await client.post<FarmExportStatus>("/farm-export", { Name, Code }))
+      .data;
+  },
+  async validateFarmExploit(Name: string, Code: string) {
+    return (
+      await client.post<FarmExportStatus>("/farm-export/validate", {
+        Name,
+        Code,
+      })
+    ).data;
+  },
   async getCaptureStatus() {
     return (await client.get<CaptureStatus>("/capture/sources")).data;
   },
@@ -217,10 +239,10 @@ const APIClient = {
       await client.delete<CaptureStatus>("/capture/sources", { data: { Name } })
     ).data;
   },
-  async searchChainStreams(host: string, page: number) {
+  async searchChainStreams(stream: Stream, page: number) {
     const response = await client.post(
       "/search.json",
-      `chost:${host} sort:ftime,id`,
+      `@seed:id:${stream.ID} chost:${stream.Client.Host} ftime:"@seed:ftime@-31s:@seed:ftime@+31s" sort:ftime,id`,
       { params: { page } },
     );
     if (!isSearchResponse(response.data))
