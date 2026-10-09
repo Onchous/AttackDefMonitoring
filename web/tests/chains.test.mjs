@@ -21,12 +21,8 @@ async function module(name) {
 }
 const { groupChains, parseRequests, pythonReplay, pythonReplayDetailed } =
   await module("chains");
-const {
-  buildAIExploitPrompt,
-  extractAIExploitCode,
-  getAIProviderLaunch,
-  validateAIExploitCode,
-} = await module("aiExploit");
+const { buildAIExploitPrompt, extractAIExploitCode, validateAIExploitCode } =
+  await module("aiExploit");
 const { renderHighlights, matchRanges } = await module("highlight");
 const { parsePorts } = await module("capture");
 const guardedRedirectCode = readFileSync(
@@ -134,7 +130,7 @@ test("detailed replay skips TLS streams while preserving valid HTTP requests", (
   assert.equal(replay.skipped[0].streamId, 1);
   assert.match(replay.skipped[0].reason, /HTTP|headers/i);
   assert.match(replay.code, /# Skipped stream 1:/);
-  assert.match(replay.code, /s\.get\(f"http:\/\/\{TARGET\}:7070\/health"/);
+  assert.match(replay.code, /s\.get\(f"http:\/\/\{IP\}:7070\/health"/);
   assert.equal(replay.code.match(/print\(r\.text, flush=True\)/g)?.length, 1);
 });
 test("farm export is readable, chronological, uses argv IP, flushes every response and preserves binary bodies", () => {
@@ -145,7 +141,8 @@ test("farm export is readable, chronological, uses argv IP, flushes every respon
   assert.ok(code.startsWith("#!/usr/bin/env python3\n"));
   assert.match(code, /IP = sys.argv\[1\]/);
   assert.ok(code.indexOf("s.post(") < code.indexOf("s.get("));
-  assert.match(code, /f"http:\/\/\{TARGET\}:7070\/flag"/);
+  assert.match(code, /f"http:\/\/\{IP\}:7070\/flag"/);
+  assert.doesNotMatch(code, /\bTARGET\b/);
   assert.equal(code.match(/print\(r.text, flush=True\)/g).length, 2);
   assert.match(code, /data=b"\\x00\\xffa"/);
   assert.match(code, /"Host": "localhost:7070"/);
@@ -202,7 +199,7 @@ class Handler(BaseHTTPRequestHandler):
 server = HTTPServer(('127.0.0.1', 0), Handler)
 threading.Thread(target=server.serve_forever, daemon=True).start()
 code = base64.b64decode('${Buffer.from(code).toString("base64")}').decode()
-code = code.replace('{TARGET}:7070', '{TARGET}:' + str(server.server_port))
+code = code.replace('{IP}:7070', '{IP}:' + str(server.server_port))
 sys.argv = ['replay-chain.py', '127.0.0.1']
 out = io.StringIO()
 with contextlib.redirect_stdout(out):
@@ -299,25 +296,6 @@ test("AI prompt bounds very large payloads before rendering them", () => {
   assert.ok(result.prompt.length <= 8_000);
   assert.doesNotMatch(result.prompt, new RegExp(flag));
   assert.match(result.prompt, /<REDACTED_FLAG>/);
-});
-test("Qwen opens its public chat and Perplexity only prefills bounded prompts", () => {
-  const prompt = "Build the replay";
-  const qwen = getAIProviderLaunch("qwen", prompt);
-  assert.equal(qwen.prefilled, false);
-  assert.equal(qwen.url, "https://qwen.ai/qwenchat");
-
-  const perplexityShort = getAIProviderLaunch("perplexity", prompt);
-  assert.equal(perplexityShort.prefilled, true);
-  assert.equal(
-    decodeURIComponent(
-      perplexityShort.url.slice(perplexityShort.provider.prefillUrl.length),
-    ),
-    prompt,
-  );
-
-  const perplexity = getAIProviderLaunch("perplexity", "x".repeat(2_000));
-  assert.equal(perplexity.prefilled, false);
-  assert.equal(perplexity.url, "https://www.perplexity.ai/");
 });
 test("extracts fenced Python and enforces the strict farm response contract", () => {
   const valid = `#!/usr/bin/env python3

@@ -4,16 +4,15 @@
       <v-btn
         class="ai-action"
         color="amber-accent-3"
-        size="large"
-        variant="flat"
-        prepend-icon="mdi-robot-excited-outline"
+        size="small"
+        variant="tonal"
+        prepend-icon="mdi-magnify"
         :disabled="loading || !selectedData.length"
         :loading="loading"
-        title="Создать exploit по выбранным событиям через Qwen или Perplexity"
+        title="Подготовить код по выбранным событиям"
         @click="aiDialog = true"
       >
-        Разобрать цепочку с ИИ ·
-        {{ loading ? "…" : selectedData.length }}
+        Разобрать
       </v-btn>
       <span class="text-caption">
         Цепочка · {{ data.length || "…" }} соединений · {{ requestCount }}
@@ -502,14 +501,7 @@ function message(errorValue: unknown) {
 }
 .ai-action {
   color: #171100 !important;
-  font-weight: 800;
-  box-shadow: 0 0 0 2px rgba(255, 193, 7, 0.28);
-}
-@media (max-width: 700px) {
-  .ai-action {
-    flex: 1 0 100%;
-    width: 100%;
-  }
+  font-weight: 600;
 }
 .replay-code :deep(textarea) {
   font-family: monospace;

@@ -172,7 +172,6 @@ function renderPython(
       : []),
     "",
     "IP = sys.argv[1]",
-    "TARGET = f'[{IP}]' if ':' in IP and not IP.startswith('[') else IP",
     "",
     `# Generated from streams ${streams.map((s) => s.Stream.ID).join(", ")}`,
     ...skipped.map(
@@ -229,7 +228,7 @@ function renderPython(
     if (!target.startsWith("/") || request.method === "CONNECT")
       throw new Error("Cannot export HTTP proxy/tunnel request");
     // Escape f-string braces originating in the captured path, preserving the IP placeholder.
-    let url = `f${pyString(`http://{TARGET}:${request.stream.Server.Port}${target.replaceAll("{", "{{").replaceAll("}", "}}")}`)}`;
+    let url = `f${pyString(`http://{IP}:${request.stream.Server.Port}${target.replaceAll("{", "{{").replaceAll("}", "}}")}`)}`;
     const headers = pyHeaders(
       request.headers.filter(
         ([name]) =>
@@ -272,7 +271,7 @@ function renderPython(
       lines.push(`${pathVariable} = rewrite(${pyString(target.slice(1))})`);
       // Keep the complete authority static. Dynamic replacements are confined
       // to the path after '/', so they can never change the destination host.
-      url = `f"http://{TARGET}:${request.stream.Server.Port}/{${pathVariable}.lstrip('/')}"`;
+      url = `f"http://{IP}:${request.stream.Server.Port}/{${pathVariable}.lstrip('/')}"`;
     }
     const args = [adapt(url), `headers=${adapt(headers)}`];
     if (hasCookies) args[0] = url;
