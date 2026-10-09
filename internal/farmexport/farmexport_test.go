@@ -149,6 +149,25 @@ func TestValidationAcceptsTargetNormalizationAndGenericRequest(t *testing.T) {
 	}
 }
 
+func TestValidationAcceptsGuardedRelativeRedirect(t *testing.T) {
+	code, err := os.ReadFile("testdata/valid-redirect.py")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validate(request{Name: "exploit.py", Code: string(code)}); err != nil {
+		t.Fatalf("guarded relative redirect rejected: %v", err)
+	}
+	for _, unsafe := range []string{
+		strings.Replace(string(code), `if location.startswith("/"):`, `if True:`, 1),
+		strings.Replace(string(code), `location = r.headers["Location"]`, `location = "@attacker.invalid"`, 1),
+		strings.Replace(string(code), `f"http://{TARGET}:5001{location}"`, `f"http://{TARGET}{location}"`, 1),
+	} {
+		if err := validate(request{Name: "exploit.py", Code: unsafe}); err == nil {
+			t.Fatal("unsafe redirect accepted")
+		}
+	}
+}
+
 func TestValidationEndpointChecksSyntaxWithoutWriting(t *testing.T) {
 	handler := validationHandler()
 	for _, test := range []struct {

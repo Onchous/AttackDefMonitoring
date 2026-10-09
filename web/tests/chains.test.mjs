@@ -29,6 +29,13 @@ const {
 } = await module("aiExploit");
 const { renderHighlights, matchRanges } = await module("highlight");
 const { parsePorts } = await module("capture");
+const guardedRedirectCode = readFileSync(
+  new URL(
+    "../../internal/farmexport/testdata/valid-redirect.py",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const origin = Date.parse("2026-10-06T12:00:00Z");
 const result = (id, ip, start, end = start) => ({
   Stream: {
@@ -70,6 +77,12 @@ test("same-IP chains include exact 1s gaps, isolate IPs and split longer gaps", 
     groups.map((g) => g.streams.map((s) => s.Stream.ID)),
     [[4], [3], [1, 2]],
   );
+});
+test("AI code check accepts a guarded relative redirect and double-quoted IPv6 normalization", () => {
+  const result = validateAIExploitCode(guardedRedirectCode);
+  assert.equal(result.valid, true, result.errors.join("; "));
+  assert.equal(result.requestCount, 4);
+  assert.equal(result.responsePrintCount, 4);
 });
 test("same client IP spans service ports and a long connection cannot bridge a start gap", () => {
   const long = result(1, "10.0.0.1", 0, 60_000);

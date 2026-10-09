@@ -78,6 +78,30 @@ def top_level_store(name, required):
         reject(name + " must have one top-level assignment")
     return matches[0] if matches else None
 
+def safe_location_path(node):
+    if not isinstance(node, ast.FormattedValue) or not isinstance(node.value, ast.Name) or node.value.id != "location":
+        return False
+    stores = [item for item in ast.walk(tree) if isinstance(item, ast.Name) and item.id == "location" and isinstance(item.ctx, (ast.Store, ast.Del))]
+    if len(stores) != 1:
+        return False
+    assignment = parents.get(stores[0])
+    if not isinstance(assignment, ast.Assign) or len(assignment.targets) != 1:
+        return False
+    source = assignment.value
+    if not isinstance(source, ast.Subscript) or dotted(source.value) != ["r", "headers"]:
+        return False
+    if not isinstance(source.slice, ast.Constant) or source.slice.value != "Location":
+        return False
+    current = node
+    while current in parents:
+        parent = parents[current]
+        if isinstance(parent, ast.If) and current in parent.body:
+            test = parent.test
+            if isinstance(test, ast.Call) and dotted(test.func) == ["location", "startswith"] and len(test.args) == 1 and not test.keywords and isinstance(test.args[0], ast.Constant) and test.args[0].value == "/":
+                return True
+        current = parent
+    return False
+
 def safe_request_url(node, has_target):
     if not isinstance(node, ast.JoinedStr) or len(node.values) < 2:
         return False
@@ -100,7 +124,7 @@ def safe_request_url(node, has_target):
             return False
         suffix = match.group(2)
     if suffix == "":
-        return len(node.values) == 3
+        return len(node.values) == 3 or (len(node.values) == 4 and safe_location_path(node.values[3]))
     return suffix.startswith("/")
 
 def validate_tree():
@@ -128,7 +152,10 @@ def validate_tree():
     allowed_stores = {id(ip_store), id(session_store)}
     if target_store is not None:
         allowed_stores.add(id(target_store))
-    protected = {"IP", "TARGET", "s", "requests", "sys", "print"}
+    location_stores = [item for item in ast.walk(tree) if isinstance(item, ast.Name) and item.id == "location" and isinstance(item.ctx, ast.Store)]
+    if len(location_stores) == 1:
+        allowed_stores.add(id(location_stores[0]))
+    protected = {"IP", "TARGET", "location", "s", "requests", "sys", "print"}
 
     class Guard(ast.NodeVisitor):
         def visit_Import(self, node):
@@ -304,6 +331,7 @@ var (
 	importPattern           = regexp.MustCompile(`(?m)^[ \t]*import[ \t]+([^\n#]+)`)
 	fromImportPattern       = regexp.MustCompile(`(?m)^[ \t]*from[ \t]+([A-Za-z_]\w*(?:[.]\w+)*)[ \t]+import[ \t]+`)
 	allowedTargetPrefix     = regexp.MustCompile(`^https?://\{(?:IP|TARGET)\}(?::\d{1,5})?(?:/|$)`)
+	allowedRedirectTarget   = regexp.MustCompile(`^https?://\{(?:IP|TARGET)\}:[0-9]{1,5}\{location\}$`)
 	dangerousPattern        = regexp.MustCompile(`\b(?:eval|exec|compile|__import__|open|breakpoint|input)[ \t]*\(|\b(?:os|subprocess|socket|shutil|pathlib|ctypes|ftplib|smtplib|telnetlib)[ \t]*[.]|\b(?:http[ \t]*[.][ \t]*client|urllib[ \t]*[.][ \t]*request|urlopen|HTTPConnection|HTTPSConnection)\b|\brequests[ \t]*[.][ \t]*(?:get|post|put|patch|delete|head|options|request|send)[ \t]*\(|\bs[ \t]*[.][ \t]*send[ \t]*\(|\bsys[ \t]*[.][ \t]*stdout[ \t]*[.][ \t]*write[ \t]*\(`)
 )
 
@@ -464,7 +492,7 @@ func validate(payload request) error {
 			} else {
 				lineEnd += lineStart
 			}
-			validTarget = targetNormalization.MatchString(payload.Code[lineStart:lineEnd])
+			validTarget = targetNormalization.MatchString(strings.ReplaceAll(payload.Code[lineStart:lineEnd], `"`, `'`))
 		}
 		if !validTarget {
 			return fmt.Errorf("TARGET may only contain the standard IPv6 normalization")
@@ -670,7 +698,7 @@ func validTargetExpression(expression string) bool {
 	if closing != len(candidate)-1 {
 		return false
 	}
-	return allowedTargetPrefix.MatchString(candidate[2:closing])
+	return allowedTargetPrefix.MatchString(candidate[2:closing]) || allowedRedirectTarget.MatchString(candidate[2:closing])
 }
 
 func immediatePrint(masked string, closing int, indent string) bool {
