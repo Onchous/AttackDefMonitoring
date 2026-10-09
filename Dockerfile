@@ -1,10 +1,3 @@
-# Build frontend
-FROM node:24-alpine AS frontend_builder
-RUN apk add --no-cache git
-WORKDIR /app
-COPY ./web/ /app
-RUN yarn install --frozen-lockfile && yarn build
-
 # Build backend
 FROM golang:1.26 AS backend_builder
 WORKDIR /app
@@ -14,8 +7,9 @@ COPY ./go.mod ./go.sum ./
 RUN go mod download
 
 COPY ./ ./
-COPY --from=frontend_builder /app/dist ./web/dist
-RUN go build -o ./bin/pkappa2 ./cmd/pkappa2/main.go
+# The checked-in frontend bundle lets deployment work when npm is unreachable.
+# Rebuild web/dist with `cd web && npm run build` after changing the UI.
+RUN test -s ./web/dist/index.html && go build -o ./bin/pkappa2 ./cmd/pkappa2/main.go
 
 # Run
 FROM ubuntu:latest

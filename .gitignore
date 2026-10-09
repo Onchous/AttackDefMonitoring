@@ -1,6 +1,5 @@
 .DS_Store
 node_modules
-/web/dist
 __pycache__
 docker_data/*
 tmp/*
