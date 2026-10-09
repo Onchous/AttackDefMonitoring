@@ -27,10 +27,11 @@ RUN python3 -m pip install --break-system-packages --upgrade -r requirements.txt
 COPY --from=backend_builder /app/bin/pkappa2 ./pkappa2
 COPY --from=backend_builder /app/web/dist ./web/dist
 
-# Ubuntu images may already define UID/GID 1000. Keep the numeric identity
-# used by existing data volumes without creating a conflicting account.
-RUN mkdir -p /data /pcaps_in /app/converters && chown 1000:1000 /data /pcaps_in /app/converters
-USER 1000:1000
+# The original image's adduser allocated UID/GID 1001 after Ubuntu's
+# built-in 1000 account. Keep that identity for existing /data volumes.
+RUN groupadd --gid 1001 pkappa2 && useradd --uid 1001 --gid pkappa2 --create-home pkappa2
+RUN mkdir -p /data /pcaps_in /app/converters && chown pkappa2:pkappa2 /data /pcaps_in /app/converters
+USER pkappa2
 
 EXPOSE 8080
 VOLUME /data
