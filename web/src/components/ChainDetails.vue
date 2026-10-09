@@ -1,6 +1,20 @@
 <template>
   <div>
     <div class="d-flex align-center flex-wrap ga-2 px-4 py-1">
+      <v-btn
+        class="ai-action"
+        color="amber-accent-3"
+        size="large"
+        variant="flat"
+        prepend-icon="mdi-robot-excited-outline"
+        :disabled="loading || !selectedData.length"
+        :loading="loading"
+        title="Создать exploit по выбранным событиям через Qwen или Perplexity"
+        @click="aiDialog = true"
+      >
+        Разобрать цепочку с ИИ ·
+        {{ loading ? "…" : selectedData.length }}
+      </v-btn>
       <span class="text-caption">
         Цепочка · {{ data.length || "…" }} соединений · {{ requestCount }}
         HTTP-запросов
@@ -30,16 +44,6 @@
         </v-btn>
       </template>
       <v-spacer />
-      <v-btn
-        color="amber-darken-2"
-        size="small"
-        variant="flat"
-        prepend-icon="mdi-creation"
-        :disabled="loading || !selectedData.length"
-        @click="aiDialog = true"
-      >
-        Разобрать с ИИ
-      </v-btn>
       <v-btn
         size="small"
         variant="tonal"
@@ -495,6 +499,17 @@ function message(errorValue: unknown) {
 .flag-chip {
   color: #111 !important;
   font-weight: 800;
+}
+.ai-action {
+  color: #171100 !important;
+  font-weight: 800;
+  box-shadow: 0 0 0 2px rgba(255, 193, 7, 0.28);
+}
+@media (max-width: 700px) {
+  .ai-action {
+    flex: 1 0 100%;
+    width: 100%;
+  }
 }
 .replay-code :deep(textarea) {
   font-family: monospace;
