@@ -5,7 +5,7 @@
         class="ai-action"
         color="amber-accent-3"
         size="small"
-        variant="tonal"
+        variant="flat"
         prepend-icon="mdi-magnify"
         :disabled="loading || !selectedData.length"
         :loading="loading"

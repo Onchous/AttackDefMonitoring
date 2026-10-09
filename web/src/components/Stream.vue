@@ -258,6 +258,13 @@
       stream.error
     }}</v-alert>
     <div v-else-if="stream.stream !== null">
+      <ChainDetails
+        :stream="stream.stream"
+        :expanded="$route.query.chain === '1'"
+        :presentation="presentation"
+        :highlight-matches="streams.result?.DataRegexes"
+        :url-decode="urlDecode"
+      />
       <v-container fluid>
         <v-row no-gutters>
           <v-col cols="1" class="text-subtitle-2">Client:</v-col>
@@ -395,13 +402,6 @@
           </v-tabs>
         </v-row>
       </v-container>
-      <ChainDetails
-        :stream="stream.stream"
-        :expanded="$route.query.chain === '1'"
-        :presentation="presentation"
-        :highlight-matches="streams.result?.DataRegexes"
-        :url-decode="urlDecode"
-      />
       <StreamData
         v-if="$route.query.chain !== '1'"
         ref="streamData"
